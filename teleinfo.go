@@ -2,49 +2,25 @@ package main
 
 import (
 	"bufio"
-	"fmt"
 	"log"
 	"reflect"
 	"strconv"
 	"strings"
-	"time"
 
 	ms "github.com/mitchellh/mapstructure"
-	"github.com/tarm/serial"
 )
-
-func main() {
-	config := &serial.Config{
-		Name:        "/dev/ttyAMA0",
-		Baud:        1200,
-		Parity:      serial.ParityEven,
-		ReadTimeout: time.Second * 1,
-		Size:        7,
-	}
-
-	stream, err := serial.OpenPort(config)
-	if err != nil {
-		log.Fatal(err)
-	}
-	reader := bufio.NewReader(stream)
-
-	for {
-		frame, _ := GetData(reader)
-		fmt.Printf("%v\n", frame)
-	}
-}
 
 // map[ADCO:000000000000 BASE:007619994 HHPHC:A IINST:002 IMAX:090 ISOUSC:30 MOTDETAT:000000 OPTARIF:BASE PAPP:00500 PTEC:TH..]
 
 type TeleinfoFrame struct {
-	Index             uint `mapstructure:"BASE"`
-	IntensityInstant  uint `mapstructure:"IINST"`
-	IntensityMax      uint `mapstructure:"IMAX"`
-	InstantSubscribed uint `mapstructure:"ISOUSC"`
-	PowerApparent     uint `mapstructure:"PAPP"`
+	Index               uint `mapstructure:"BASE"`
+	IntensityInstant    uint `mapstructure:"IINST"`
+	IntensityMax        uint `mapstructure:"IMAX"`
+	IntensitySubscribed uint `mapstructure:"ISOUSC"`
+	PowerApparent       uint `mapstructure:"PAPP"`
 }
 
-func GetData(reader *bufio.Reader) (frame TeleinfoFrame, err error) {
+func GetTeleinfoData(reader *bufio.Reader) (frame TeleinfoFrame, err error) {
 	slice, err := readFrame(reader)
 	if err != nil {
 		log.Fatal(err)
