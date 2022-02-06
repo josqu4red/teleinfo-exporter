@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
 
 	ms "github.com/mitchellh/mapstructure"
 )
@@ -18,9 +19,12 @@ type TeleinfoFrame struct {
 	IntensityMax        uint `mapstructure:"IMAX"`
 	IntensitySubscribed uint `mapstructure:"ISOUSC"`
 	PowerApparent       uint `mapstructure:"PAPP"`
+	CollectionTime      time.Duration
 }
 
 func GetTeleinfoData(reader *bufio.Reader) (frame TeleinfoFrame, err error) {
+	start := time.Now()
+
 	slice, err := readFrame(reader)
 	if err != nil {
 		log.Fatal(err)
@@ -30,6 +34,8 @@ func GetTeleinfoData(reader *bufio.Reader) (frame TeleinfoFrame, err error) {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	frame.CollectionTime = time.Since(start)
 
 	return frame, nil
 }
