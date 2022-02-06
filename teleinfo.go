@@ -9,9 +9,14 @@ import (
 	"time"
 
 	ms "github.com/mitchellh/mapstructure"
+	"github.com/tarm/serial"
 )
 
 // map[ADCO:000000000000 BASE:007619994 HHPHC:A IINST:002 IMAX:090 ISOUSC:30 MOTDETAT:000000 OPTARIF:BASE PAPP:00500 PTEC:TH..]
+
+type Teleinfo struct {
+	Reader *bufio.Reader
+}
 
 type TeleinfoFrame struct {
 	Index               uint `mapstructure:"BASE"`
@@ -22,17 +27,35 @@ type TeleinfoFrame struct {
 	CollectionTime      time.Duration
 }
 
-func GetTeleinfoData(reader *bufio.Reader) (frame TeleinfoFrame, err error) {
+func NewTeleinfo() *Teleinfo {
+	config := &serial.Config{
+		Name:        "/dev/ttyAMA0",
+		Baud:        1200,
+		Parity:      serial.ParityEven,
+		ReadTimeout: time.Second * 1,
+		Size:        7,
+	}
+	stream, err := serial.OpenPort(config)
+	if err != nil {
+		log.Fatalf("Unable to open serial port: %v", err)
+	}
+
+	return &Teleinfo{Reader: bufio.NewReader(stream)}
+}
+
+func (t *Teleinfo) GetData() (frame *TeleinfoFrame, err error) {
 	start := time.Now()
 
-	slice, err := readFrame(reader)
+	slice, err := readFrame(t.Reader)
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("Failed to read data: %v\n", err)
+		return nil, err
 	}
 
 	frame, err = parseFrame(slice)
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("Failed to parse data: %v\n", err)
+		return nil, err
 	}
 
 	frame.CollectionTime = time.Since(start)
@@ -47,10 +70,11 @@ func readFrame(reader *bufio.Reader) (slice []byte, err error) {
 	if err != nil {
 		return nil, err
 	}
+
 	return slice, nil
 }
 
-func parseFrame(slice []byte) (frame TeleinfoFrame, err error) {
+func parseFrame(slice []byte) (frame *TeleinfoFrame, err error) {
 	str := strings.Trim(string(slice), "\r\n\x02\x03") // Remove leading/trailing chars
 	tuples := strings.Split(str, "\r\n")
 
@@ -67,12 +91,12 @@ func parseFrame(slice []byte) (frame TeleinfoFrame, err error) {
 
 	decoder, err := ms.NewDecoder(config)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	err = decoder.Decode(frameMap)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	// fmt.Printf("input: %q\n", slice)
