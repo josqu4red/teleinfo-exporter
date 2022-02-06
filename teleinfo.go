@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"fmt"
 	"log"
 	"reflect"
 	"strconv"
@@ -9,12 +10,44 @@ import (
 	"time"
 
 	ms "github.com/mitchellh/mapstructure"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tarm/serial"
 )
 
-// map[ADCO:000000000000 BASE:007619994 HHPHC:A IINST:002 IMAX:090 ISOUSC:30 MOTDETAT:000000 OPTARIF:BASE PAPP:00500 PTEC:TH..]
+var (
+	index = prometheus.NewDesc(
+		"teleinfo_index_kwh",
+		"Current value of index in kilowatt.hour",
+		nil, nil,
+	)
+	intensityInstant = prometheus.NewDesc(
+		"teleinfo_intensity_instant_amp",
+		"Current intensity demand in ampere",
+		nil, nil,
+	)
+	intensityMax = prometheus.NewDesc(
+		"teleinfo_intensity_max_amp",
+		"Max intensity in ampere",
+		nil, nil,
+	)
+	intensitySubscribed = prometheus.NewDesc(
+		"teleinfo_intensity_subscribed_amp",
+		"Subscribed intensity in ampere",
+		nil, nil,
+	)
+	powerApparent = prometheus.NewDesc(
+		"teleinfo_power_apparent_va",
+		"Current apparent power in volt.ampere",
+		nil, nil,
+	)
+	collectionTime = prometheus.NewDesc(
+		"teleinfo_collection_time_seconds",
+		"Teleinfo data collection duration in seconds",
+		nil, nil,
+	)
+)
 
-type Teleinfo struct {
+type TeleinfoCollector struct {
 	Reader *bufio.Reader
 }
 
@@ -27,9 +60,9 @@ type TeleinfoFrame struct {
 	CollectionTime      time.Duration
 }
 
-func NewTeleinfo() *Teleinfo {
+func NewTeleinfoCollector(serialDev string, reg prometheus.Registerer) *TeleinfoCollector {
 	config := &serial.Config{
-		Name:        "/dev/ttyAMA0",
+		Name:        serialDev,
 		Baud:        1200,
 		Parity:      serial.ParityEven,
 		ReadTimeout: time.Second * 1,
@@ -40,10 +73,12 @@ func NewTeleinfo() *Teleinfo {
 		log.Fatalf("Unable to open serial port: %v", err)
 	}
 
-	return &Teleinfo{Reader: bufio.NewReader(stream)}
+	t := &TeleinfoCollector{Reader: bufio.NewReader(stream)}
+	reg.MustRegister(t)
+	return t
 }
 
-func (t *Teleinfo) GetData() (frame *TeleinfoFrame, err error) {
+func (t *TeleinfoCollector) GetData() (frame *TeleinfoFrame, err error) {
 	start := time.Now()
 
 	slice, err := readFrame(t.Reader)
@@ -60,11 +95,27 @@ func (t *Teleinfo) GetData() (frame *TeleinfoFrame, err error) {
 
 	frame.CollectionTime = time.Since(start)
 
+	fmt.Printf("%v\n", frame)
+
 	return frame, nil
 }
 
+func (t *TeleinfoCollector) Describe(ch chan<- *prometheus.Desc) {
+	prometheus.DescribeByCollect(t, ch)
+}
+
+func (t *TeleinfoCollector) Collect(ch chan<- prometheus.Metric) {
+	frame, _ := t.GetData()
+
+	ch <- prometheus.MustNewConstMetric(index, prometheus.GaugeValue, float64(frame.Index))
+	ch <- prometheus.MustNewConstMetric(intensityInstant, prometheus.GaugeValue, float64(frame.IntensityInstant))
+	ch <- prometheus.MustNewConstMetric(intensityMax, prometheus.GaugeValue, float64(frame.IntensityMax))
+	ch <- prometheus.MustNewConstMetric(intensitySubscribed, prometheus.GaugeValue, float64(frame.IntensitySubscribed))
+	ch <- prometheus.MustNewConstMetric(powerApparent, prometheus.GaugeValue, float64(frame.PowerApparent))
+	ch <- prometheus.MustNewConstMetric(collectionTime, prometheus.GaugeValue, float64(frame.CollectionTime.Seconds()))
+}
+
 func readFrame(reader *bufio.Reader) (slice []byte, err error) {
-	// "\x02\nADCO 000000000000 @\r\nOPTARIF BASE 0\r\nISOUSC 30 9\r\nBASE 007619848 6\r\nPTEC TH.. $\r\nIINST 002 Y\r\nIMAX 090 H\r\nPAPP 00420 '\r\nHHPHC A ,\r\nMOTDETAT 000000 B\r\x03"
 	reader.ReadSlice('\x02')              // Read until frame start, discard incomplete frame
 	slice, err = reader.ReadSlice('\x03') // Read until frame end
 	if err != nil {
@@ -98,13 +149,6 @@ func parseFrame(slice []byte) (frame *TeleinfoFrame, err error) {
 	if err != nil {
 		return nil, err
 	}
-
-	// fmt.Printf("input: %q\n", slice)
-	// fmt.Printf("trimmed: %q\n", str)
-	// fmt.Printf("split: %+q\n", tuples)
-	// fmt.Printf("map: %v\n", frameMap)
-	// fmt.Printf("%v\n", frame)
-	// fmt.Printf("\n")
 
 	return frame, err
 }

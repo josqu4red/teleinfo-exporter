@@ -2,16 +2,15 @@ package main
 
 import (
 	"log"
+	"net/http"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func main() {
-
-	t := NewTeleinfo()
-	for {
-		frame, err := t.GetData()
-		if err != nil {
-			log.Printf("Unable to open serial port: %v", err)
-		}
-		log.Printf("%v\n", frame)
-	}
+	reg := prometheus.NewPedanticRegistry()
+	NewTeleinfoCollector("/dev/ttyAMA0", reg)
+	http.Handle("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
+	log.Fatal(http.ListenAndServe(":8080", nil))
 }
