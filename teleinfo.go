@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"fmt"
 	"log"
 	"reflect"
 	"strconv"
@@ -94,8 +93,6 @@ func (t *TeleinfoCollector) GetData() (frame *TeleinfoFrame, err error) {
 	}
 
 	frame.CollectionTime = time.Since(start)
-
-	fmt.Printf("%v\n", frame)
 
 	return frame, nil
 }
