@@ -113,7 +113,7 @@ func (t *TeleinfoCollector) Collect(ch chan<- prometheus.Metric) {
 }
 
 func readFrame(reader *bufio.Reader) (slice []byte, err error) {
-	reader.ReadSlice('\x02')              // Read until frame start, discard incomplete frame
+	reader.ReadSlice('\x03')              // Read until frame start, discard incomplete frame
 	slice, err = reader.ReadSlice('\x03') // Read until frame end
 	if err != nil {
 		return nil, err
@@ -128,7 +128,10 @@ func parseFrame(slice []byte) (frame *TeleinfoFrame, err error) {
 
 	frameMap := make(map[string]interface{})
 	for _, tuple := range tuples {
-		fields := strings.Fields(tuple)
+		fields, err := splitTuple(tuple)
+		if err != nil {
+			return nil, err
+		}
 		frameMap[fields[0]] = fields[1]
 	}
 
@@ -148,6 +151,24 @@ func parseFrame(slice []byte) (frame *TeleinfoFrame, err error) {
 	}
 
 	return frame, err
+}
+
+func splitTuple(tuple string) (fields []string, err error) {
+	fields = strings.Split(tuple, " ")
+	if len(fields) != 3 {
+		return nil, err
+	}
+
+	checksum := 0
+	for _, v := range tuple[:len(tuple)-2] {
+		checksum += int(v)
+	}
+	checksum = (checksum & 63) + 32
+
+	if int(rune(fields[2][0])) != checksum {
+		return nil, err
+	}
+	return fields[:2], err
 }
 
 func paddedIntStringToUintHookFunc() ms.DecodeHookFunc {

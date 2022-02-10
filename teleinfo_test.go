@@ -27,3 +27,22 @@ func TestParseFrame(t *testing.T) {
 		t.Errorf("frame should be %v, got: %v", output, frame)
 	}
 }
+
+func TestSplitTuple(t *testing.T) {
+	tables := []struct {
+		input  string
+		output []string
+	}{
+		{"ADCO 031762270346 @", []string{"ADCO", "031762270346"}},
+		{"PTEC TH.. $", []string{"PTEC", "TH.."}},
+		{"IINST 002 Y", []string{"IINST", "002"}},
+		{"IMAX 090 H", []string{"IMAX", "090"}},
+	}
+
+	for _, table := range tables {
+		fields, _ := splitTuple(table.input)
+		if !cmp.Equal(fields, table.output) {
+			t.Errorf("Failure: %s", table.input)
+		}
+	}
+}
