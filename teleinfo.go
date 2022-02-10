@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"fmt"
 	"log"
 	"reflect"
 	"strconv"
@@ -69,7 +70,7 @@ func NewTeleinfoCollector(serialDev string, reg prometheus.Registerer) *Teleinfo
 	}
 	stream, err := serial.OpenPort(config)
 	if err != nil {
-		log.Fatalf("Unable to open serial port: %v", err)
+		log.Fatalf("Unable to open serial port: %w", err)
 	}
 
 	t := &TeleinfoCollector{Reader: bufio.NewReader(stream)}
@@ -82,14 +83,12 @@ func (t *TeleinfoCollector) GetData() (frame *TeleinfoFrame, err error) {
 
 	slice, err := readFrame(t.Reader)
 	if err != nil {
-		log.Printf("Failed to read data: %v\n", err)
-		return nil, err
+		return nil, fmt.Errorf("read data: %w\n", err)
 	}
 
 	frame, err = parseFrame(slice)
 	if err != nil {
-		log.Printf("Failed to parse data: %v\n", err)
-		return nil, err
+		return nil, fmt.Errorf("parse data: %w\n", err)
 	}
 
 	frame.CollectionTime = time.Since(start)
@@ -102,7 +101,11 @@ func (t *TeleinfoCollector) Describe(ch chan<- *prometheus.Desc) {
 }
 
 func (t *TeleinfoCollector) Collect(ch chan<- prometheus.Metric) {
-	frame, _ := t.GetData()
+	frame, err := t.GetData()
+	if err != nil {
+		log.Printf("Error collecting metrics: %w", err)
+		return
+	}
 
 	ch <- prometheus.MustNewConstMetric(index, prometheus.GaugeValue, float64(frame.Index))
 	ch <- prometheus.MustNewConstMetric(intensityInstant, prometheus.GaugeValue, float64(frame.IntensityInstant))
@@ -150,13 +153,13 @@ func parseFrame(slice []byte) (frame *TeleinfoFrame, err error) {
 		return nil, err
 	}
 
-	return frame, err
+	return frame, nil
 }
 
 func splitTuple(tuple string) (fields []string, err error) {
 	fields = strings.Split(tuple, " ")
-	if len(fields) != 3 {
-		return nil, err
+	if nb := len(fields); nb != 3 {
+		return nil, fmt.Errorf("expected 3 elements, got %d", len(fields))
 	}
 
 	checksum := 0
@@ -166,7 +169,7 @@ func splitTuple(tuple string) (fields []string, err error) {
 	checksum = (checksum & 63) + 32
 
 	if int(rune(fields[2][0])) != checksum {
-		return nil, err
+		return nil, fmt.Errorf("invalid checksum")
 	}
 	return fields[:2], err
 }
