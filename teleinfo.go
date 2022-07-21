@@ -103,7 +103,7 @@ func (t *TeleinfoCollector) Describe(ch chan<- *prometheus.Desc) {
 func (t *TeleinfoCollector) Collect(ch chan<- prometheus.Metric) {
 	frame, err := t.GetData()
 	if err != nil {
-		log.Printf("Error collecting metrics: %w", err)
+		log.Printf("Error collecting metrics: %v", err)
 		return
 	}
 
@@ -182,3 +182,19 @@ func paddedIntStringToUintHookFunc() ms.DecodeHookFunc {
 		return strconv.ParseInt(data.(string), 10, t.Bits())
 	}
 }
+
+// panic: runtime error: index out of range [0] with length 0
+//
+// goroutine 19233 [running]:
+// main.splitTuple({0x2914053, 0xa})
+//         /wd/teleinfo.go:178 +0x1fc
+// main.parseFrame({0x290eb48, 0xe0, 0x4b8})
+//         /wd/teleinfo.go:138 +0x278
+// main.(*TeleinfoCollector).GetData(0x280ef78)
+//         /wd/teleinfo.go:89 +0xc8
+// main.(*TeleinfoCollector).Collect(0x280ef78, 0x28efa80)
+//         /wd/teleinfo.go:104 +0x1c
+// github.com/prometheus/client_golang/prometheus.(*Registry).Gather.func1()
+//         /go/pkg/mod/github.com/prometheus/client_golang@v1.12.1/prometheus/registry.go:446 +0x100
+// created by github.com/prometheus/client_golang/prometheus.(*Registry).Gather
+//         /go/pkg/mod/github.com/prometheus/client_golang@v1.12.1/prometheus/registry.go:457 +0x3f4
